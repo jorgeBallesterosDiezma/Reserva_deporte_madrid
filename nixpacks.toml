@@ -1,8 +1,15 @@
 [phases.setup]
 nixPkgs = ["...", "playwright-driver"]
+# Añadimos la variable de entorno que pide Mise para desactivar la verificación conflictiva
+aptPkgs = []
 
 [phases.build]
-cmds = ["pip install -r requirements.txt", "playwright install chromium"]
+# Pasamos la variable de entorno directamente en el build para que no falle al instalar Python
+cmds = [
+  "export MISE_PYTHON_GITHUB_ATTESTATIONS=false",
+  "pip install -r requirements.txt",
+  "playwright install chromium"
+]
 
 [phases.start]
 cmd = "python bot.py"
