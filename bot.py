@@ -245,7 +245,7 @@ def _programar_tarea(application: Application, reserva: dict):
 
 
 async def _reprogramar_pendientes(application: Application):
-    """Al arrancar (o reiniciar en Render), vuelve a programar lo que seguía pendiente."""
+    """Al arrancar (o reiniciar), vuelve a programar lo que seguía pendiente."""
     reservas = await storage.listar_reservas()
     ahora = dt.datetime.now()
     for r in reservas:
