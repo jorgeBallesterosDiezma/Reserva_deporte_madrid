@@ -15,7 +15,5 @@ DEPORTES_CONTRASENA = os.environ["DEPORTES_CONTRASENA"]
 PLAYWRIGHT_HEADLESS = os.environ.get("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
 
 # Ruta del fichero donde se persisten las reservas (pendientes/completadas/error).
-# ⚠️ En el plan gratuito de Render el disco es efímero: si el servicio se reinicia
-# o se redeploya, este fichero se pierde. Si quieres que sobreviva, añade un
-# "Persistent Disk" en Render y apunta esta ruta a esa carpeta montada.
+
 RESERVAS_JSON_PATH = os.environ.get("RESERVAS_JSON_PATH", "reservas.json")

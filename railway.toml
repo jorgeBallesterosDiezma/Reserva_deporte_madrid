@@ -1,0 +1,11 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python bot.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# Este servicio no expone HTTP (es un worker que solo hace long-polling a
+# Telegram), así que en el panel de Railway NO generes un dominio público
+# para él: no hace falta y Railway no necesita que escuche en ningún puerto.
