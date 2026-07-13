@@ -15,7 +15,12 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 import storage
-from reserva_madrid import construir_objetivo, ejecutar_flujo_completo, calcular_apertura_reserva
+from reserva_madrid import (
+    construir_objetivo,
+    ejecutar_flujo_completo,
+    calcular_apertura_reserva,
+    ZONA_HORARIA,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -247,13 +252,14 @@ def _programar_tarea(application: Application, reserva: dict):
 async def _reprogramar_pendientes(application: Application):
     """Al arrancar (o reiniciar), vuelve a programar lo que seguía pendiente."""
     reservas = await storage.listar_reservas()
-    ahora = dt.datetime.now()
+    ahora = dt.datetime.now(ZONA_HORARIA)
     for r in reservas:
         if r["status"] != "pendiente":
             continue
-        inicio_clase = dt.datetime.strptime(f"{r['fecha_iso']} {r['hora_texto']}", "%Y-%m-%d %H:%M")
+        inicio_clase = dt.datetime.strptime(
+            f"{r['fecha_iso']} {r['hora_texto']}", "%Y-%m-%d %H:%M"
+        ).replace(tzinfo=ZONA_HORARIA)
         if inicio_clase < ahora:
-            # la clase ya pasó, la marcamos como caducada en vez de intentarlo
             await storage.actualizar_estado(r["id"], "caducada")
             continue
         logger.info("Reprogramando reserva pendiente %s tras reinicio", r["id"])

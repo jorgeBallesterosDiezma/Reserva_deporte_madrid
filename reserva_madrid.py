@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import datetime as dt
+from zoneinfo import ZoneInfo
 from typing import Callable, Awaitable
 from playwright.async_api import async_playwright, Page, expect, TimeoutError as PlaywrightTimeoutError
 import asyncio
@@ -15,6 +16,13 @@ INTERVALO_POLLING_LARGO_SEGUNDOS = 1
 INTERVALO_POLLING_FINO_SEGUNDOS = 0.2
 SEGUNDOS_PARA_POLLING_FINO = 5  # en los últimos 5s, polling más agresivo
 
+# Las horas de las actividades son siempre hora de Madrid. El servidor donde
+# corre el bot (Railway, Docker, etc.) normalmente lleva el reloj en UTC, así
+# que fijamos la zona horaria explícitamente en vez de fiarnos del reloj del
+# sistema — si no, los cálculos de "cuándo abre la reserva" se desincronizan
+# 1-2 horas según la época del año (horario de verano/invierno).
+ZONA_HORARIA = ZoneInfo("Europe/Madrid")
+
 Notificador = Callable[[str], Awaitable[None]]
 
 
@@ -25,7 +33,7 @@ class ClaseObjetivo:
     subtitulo: str | None
     hora_texto: str
     fecha_datepicker: str  # dd/mm/yyyy
-    inicio_clase: dt.datetime  # fecha+hora real de la clase
+    inicio_clase: dt.datetime  # fecha+hora real de la clase (con tzinfo Europe/Madrid)
 
 
 def construir_objetivo(
@@ -37,7 +45,7 @@ def construir_objetivo(
 ) -> ClaseObjetivo:
     fecha = dt.datetime.strptime(fecha_iso, "%Y-%m-%d").date()
     hora = dt.datetime.strptime(hora_texto, "%H:%M").time()
-    inicio_clase = dt.datetime.combine(fecha, hora)
+    inicio_clase = dt.datetime.combine(fecha, hora, tzinfo=ZONA_HORARIA)
     return ClaseObjetivo(
         polideportivo=polideportivo,
         nombre_actividad=nombre_actividad,
@@ -55,7 +63,7 @@ def calcular_apertura_reserva(objetivo: ClaseObjetivo) -> dt.datetime:
 async def esperar_hasta_dos_minutos_antes(objetivo: ClaseObjetivo, notificar: Notificador):
     apertura = calcular_apertura_reserva(objetivo)
     momento_login = apertura - dt.timedelta(seconds=MARGEN_ANTES_LOGIN_SEGUNDOS)
-    ahora = dt.datetime.now()
+    ahora = dt.datetime.now(ZONA_HORARIA)
 
     segundos_espera = (momento_login - ahora).total_seconds()
 
@@ -73,7 +81,7 @@ async def esperar_hasta_apertura_exacta(objetivo: ClaseObjetivo):
     apertura = calcular_apertura_reserva(objetivo)
 
     while True:
-        ahora = dt.datetime.now()
+        ahora = dt.datetime.now(ZONA_HORARIA)
         restante = (apertura - ahora).total_seconds()
 
         if restante <= 0:
@@ -182,21 +190,25 @@ async def reservar_clase(page: Page, objetivo: ClaseObjetivo, notificar: Notific
         )
 
     await notificar(f"✅ ¡Hay plazas disponibles ({plazas_disponibles})! Pulsando para reservar...")
-    
+    await bloque_hora.locator("a").click()
     try:
-        await bloque_hora.locator("a").click()
-        await page.wait_for_load_state("networkidle")
-        
+        await expect(page).to_have_url(
+            " https://deportesweb.madrid.es/DeportesWeb/Modulos/VentaServicios/CarritoConfirmar"
+        )
     except PlaywrightTimeoutError:
         raise RuntimeError("Fallo al entrar a la página de confirmación de reserva")
 
     li_metodo = page.locator("li.list-group-item").filter(has_text="Monedero")
     radio = li_metodo.locator("input[type='radio']")
-    
     await radio.click()
-    await asyncio.sleep(1)
     await page.click("#ContentFixedSection_uCarritoConfirmar_btnConfirmCart")
-    await asyncio.sleep(1)
+    try:
+        await page.wait_for_load_state("networkidle")
+    except PlaywrightTimeoutError:
+        raise RuntimeError("Fallo al confirmar el pago")
+
+    # Verificación final: solo damos la reserva por buena si aparece el
+    # texto "Confirmado" (con el icono de check verde) en la página.
     try:
         await page.get_by_text("Confirmado", exact=True).wait_for(
             state="visible", timeout=TIMEOUT_MS_CORTO
@@ -223,7 +235,7 @@ async def ejecutar_flujo_completo(objetivo: ClaseObjetivo, notificar: Notificado
     await esperar_hasta_dos_minutos_antes(objetivo, notificar)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)     
+        browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)
         page = await browser.new_page()
 
         await login(page, DEPORTES_USUARIO, DEPORTES_CONTRASENA)
