@@ -182,21 +182,25 @@ async def reservar_clase(page: Page, objetivo: ClaseObjetivo, notificar: Notific
         )
 
     await notificar(f"✅ ¡Hay plazas disponibles ({plazas_disponibles})! Pulsando para reservar...")
-    
+    await bloque_hora.locator("a").click()
     try:
-        await bloque_hora.locator("a").click()
-        await page.wait_for_load_state("networkidle")
-        
+        await expect(page).to_have_url(
+            " https://deportesweb.madrid.es/DeportesWeb/Modulos/VentaServicios/CarritoConfirmar"
+        )
     except PlaywrightTimeoutError:
         raise RuntimeError("Fallo al entrar a la página de confirmación de reserva")
 
     li_metodo = page.locator("li.list-group-item").filter(has_text="Monedero")
     radio = li_metodo.locator("input[type='radio']")
-    
     await radio.click()
-    await asyncio.sleep(1)
     await page.click("#ContentFixedSection_uCarritoConfirmar_btnConfirmCart")
-    await asyncio.sleep(1)
+    try:
+        await page.wait_for_load_state("networkidle")
+    except PlaywrightTimeoutError:
+        raise RuntimeError("Fallo al confirmar el pago")
+
+    # Verificación final: solo damos la reserva por buena si aparece el
+    # texto "Confirmado" (con el icono de check verde) en la página.
     try:
         await page.get_by_text("Confirmado", exact=True).wait_for(
             state="visible", timeout=TIMEOUT_MS_CORTO
@@ -223,7 +227,7 @@ async def ejecutar_flujo_completo(objetivo: ClaseObjetivo, notificar: Notificado
     await esperar_hasta_dos_minutos_antes(objetivo, notificar)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)     
+        browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)
         page = await browser.new_page()
 
         await login(page, DEPORTES_USUARIO, DEPORTES_CONTRASENA)

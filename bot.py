@@ -253,7 +253,6 @@ async def _reprogramar_pendientes(application: Application):
             continue
         inicio_clase = dt.datetime.strptime(f"{r['fecha_iso']} {r['hora_texto']}", "%Y-%m-%d %H:%M")
         if inicio_clase < ahora:
-            # la clase ya pasó, la marcamos como caducada en vez de intentarlo
             await storage.actualizar_estado(r["id"], "caducada")
             continue
         logger.info("Reprogramando reserva pendiente %s tras reinicio", r["id"])
