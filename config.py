@@ -26,4 +26,4 @@ PLAYWRIGHT_HEADLESS = os.environ.get("PLAYWRIGHT_HEADLESS", "true").lower() != "
 
 
 # Ruta del fichero donde se persisten las reservas (pendientes/completadas/error).
-RESERVAS_JSON_PATH = os.environ.get("RESERVAS_JSON_PATH", "reservas.json")
+#RESERVAS_JSON_PATH = os.environ.get("RESERVAS_JSON_PATH", "reservas.json")
