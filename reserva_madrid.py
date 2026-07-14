@@ -202,6 +202,16 @@ async def reservar_clase(page: Page, objetivo: ClaseObjetivo, notificar: Notific
     radio = li_metodo.locator("input[type='radio']")
     await radio.click()
     await page.click("#ContentFixedSection_uCarritoConfirmar_btnConfirmCart")
+<<<<<<< HEAD
+=======
+    try:
+        await page.wait_for_load_state("networkidle")
+    except PlaywrightTimeoutError:
+        raise RuntimeError("Fallo al confirmar el pago")
+
+    # Verificación final: solo damos la reserva por buena si aparece el
+    # texto "Confirmado" (con el icono de check verde) en la página.
+>>>>>>> e7179febf101d542e53c12ebf1854f10025de541
     try:
         await page.wait_for_load_state("networkidle")
     except PlaywrightTimeoutError:
