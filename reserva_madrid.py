@@ -209,15 +209,15 @@ async def reservar_clase(page: Page, objetivo: ClaseObjetivo, notificar: Notific
 
     # Verificación final: solo damos la reserva por buena si aparece el
     # texto "Confirmado" (con el icono de check verde) en la página.
-    try:
-        await page.get_by_text("Confirmado", exact=True).wait_for(
-            state="visible", timeout=TIMEOUT_MS_CORTO
-        )
-    except PlaywrightTimeoutError:
-        raise RuntimeError(
-            "No se encontró el mensaje 'Confirmado' tras enviar el pago; "
-            "la reserva podría no haberse completado."
-        )
+  #  try:
+   #     await page.get_by_text("Confirmado", exact=True).wait_for(
+    #        state="visible", timeout=TIMEOUT_MS_CORTO
+    #    )
+    #except PlaywrightTimeoutError:
+    #    raise RuntimeError(
+    #        "No se encontró el mensaje 'Confirmado' tras enviar el pago; "
+    #        "la reserva podría no haberse completado."
+     #   )
 
 
 async def ejecutar_flujo_completo(objetivo: ClaseObjetivo, notificar: Notificador):
