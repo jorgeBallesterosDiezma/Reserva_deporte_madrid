@@ -190,17 +190,17 @@ async def reservar_clase(page: Page, objetivo: ClaseObjetivo, notificar: Notific
         )
 
     await notificar(f"✅ ¡Hay plazas disponibles ({plazas_disponibles})! Pulsando para reservar...")
-    await bloque_hora.locator("a").click()
+    
     try:
-        await expect(page).to_have_url(
-            " https://deportesweb.madrid.es/DeportesWeb/Modulos/VentaServicios/CarritoConfirmar"
-        )
+      await bloque_hora.locator("a").click()
+      await page.wait_for_load_state("networkidle")
     except PlaywrightTimeoutError:
-        raise RuntimeError("Fallo al entrar a la página de confirmación de reserva")
-
+        raise RuntimeError(f"❌ No se pudo pulsar la actividad {objetivo.nombre_actividad}.")
+    await asyncio.sleep(1)
     li_metodo = page.locator("li.list-group-item").filter(has_text="Monedero")
     radio = li_metodo.locator("input[type='radio']")
     await radio.click()
+    await asyncio.sleep(1)
     await page.click("#ContentFixedSection_uCarritoConfirmar_btnConfirmCart")
     try:
         await page.wait_for_load_state("networkidle")
@@ -236,6 +236,7 @@ async def ejecutar_flujo_completo(objetivo: ClaseObjetivo, notificar: Notificado
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)
+     #   browser = await p.chromium.launch(headless=False)
         page = await browser.new_page()
 
         await login(page, DEPORTES_USUARIO, DEPORTES_CONTRASENA)

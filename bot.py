@@ -2,7 +2,13 @@ import asyncio
 import datetime as dt
 import logging
 
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -10,6 +16,7 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
 )
 
@@ -164,23 +171,92 @@ async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TY
 # Comandos de consulta / gestión
 # ---------------------------------------------------------------------------
 
+FILTROS_LISTAR = {
+    "todas": "Todas",
+    "pendiente": "Pendientes",
+    "completada": "Completadas",
+    "error": "Con error",
+}
+
+
+def _reserva_vigente(r: dict, ahora: dt.datetime) -> bool:
+    """Para las completadas, solo la mostramos si la clase todavía no ha pasado."""
+    if r["status"] != "completada":
+        return True
+    inicio_clase = dt.datetime.strptime(
+        f"{r['fecha_iso']} {r['hora_texto']}", "%Y-%m-%d %H:%M"
+    ).replace(tzinfo=ZONA_HORARIA)
+    return inicio_clase >= ahora
+
+
+async def _texto_listado(filtro: str) -> str:
+    reservas = await storage.listar_reservas()
+    ahora = dt.datetime.now(ZONA_HORARIA)
+
+    if filtro != "todas":
+        reservas = [r for r in reservas if r["status"] == filtro]
+
+    reservas = [r for r in reservas if _reserva_vigente(r, ahora)]
+
+    if not reservas:
+        return f"No hay reservas ({FILTROS_LISTAR[filtro].lower()})."
+
+    lineas = [f"*{FILTROS_LISTAR[filtro]}:*"]
+    for r in reservas:
+        lineas.append(
+            f"📅`{r['id']}` [{r['status']}] {r['nombre_actividad']} - {r['hora_texto']} {r['fecha_iso']}"
+            + (f"\n   ⚠️ {r['detalle']}" if r.get("detalle") else "") + (f"\n ")
+        )
+    return "\n".join(lineas)
+
+
+def _teclado_listar() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Todas", callback_data="listar:todas"),
+                InlineKeyboardButton("Pendientes", callback_data="listar:pendiente"),
+            ],
+            [
+                InlineKeyboardButton("Completadas", callback_data="listar:completada"),
+                InlineKeyboardButton("Con error", callback_data="listar:error"),
+            ],
+        ]
+    )
+
+
 async def listar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _autorizado(update):
         await _no_autorizado(update)
         return
 
-    reservas = await storage.listar_reservas()
-    if not reservas:
-        await update.message.reply_text("No hay reservas registradas.")
+    # Permite tanto "/listar" (con botones) como "/listar pendiente" directo.
+    if context.args:
+        filtro = context.args[0].lower().rstrip("s")  # admite plural: "pendientes" -> "pendiente"
+        if filtro not in FILTROS_LISTAR:
+            await update.message.reply_text(
+                "Filtro no válido. Usa: todas, pendientes, completadas o error."
+            )
+            return
+        texto = await _texto_listado(filtro)
+        await update.message.reply_text(texto, parse_mode="Markdown")
         return
 
-    lineas = []
-    for r in reservas:
-        lineas.append(
-            f"`{r['id']}` [{r['status']}] {r['nombre_actividad']} - {r['hora_texto']} {r['fecha_iso']}"
-            + (f"\n   ⚠️ {r['detalle']}" if r.get("detalle") else "")
-        )
-    await update.message.reply_text("\n".join(lineas), parse_mode="Markdown")
+    await update.message.reply_text("¿Qué quieres ver?", reply_markup=_teclado_listar())
+
+
+async def listar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.message.chat.id != TELEGRAM_CHAT_ID:
+        await query.answer("No tienes permiso para usar este bot.", show_alert=True)
+        return
+
+    await query.answer()
+    filtro = query.data.split(":", 1)[1]
+    texto = await _texto_listado(filtro)
+    await query.edit_message_text(
+        texto, parse_mode="Markdown", reply_markup=_teclado_listar()
+    )
 
 
 async def eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,7 +280,8 @@ async def eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "/nueva - programar una reserva\n"
-        "/listar - ver reservas y su estado\n"
+        "/listar - ver reservas (con botones para filtrar: todas/pendientes/completadas/error)\n"
+        "/listar <filtro> - directo, ej: /listar pendientes\n"
         "/eliminar <id> - cancelar una reserva pendiente\n"
         "/cancelar - cancelar la conversación en curso"
     )
@@ -291,6 +368,7 @@ def main():
 
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("listar", listar))
+    application.add_handler(CallbackQueryHandler(listar_callback, pattern=r"^listar:"))
     application.add_handler(CommandHandler("eliminar", eliminar))
     application.add_handler(CommandHandler("start", ayuda))
     application.add_handler(CommandHandler("ayuda", ayuda))
